@@ -1,0 +1,121 @@
+# Comprehensive Prompt for Building a Self-Learning Futures Trading Bot
+
+## Purpose and Objective
+Design an advanced self-learning trading bot specifically for futures markets that can autonomously analyze market data, identify patterns, make trading decisions, and continuously improve its performance through reinforcement learning and other AI techniques.
+
+## Core Capabilities Required
+
+### 1. Market Data Processing
+- Implement real-time processing of market data feeds (price, volume, order book depth)
+- Handle historical data for backtesting and model training
+- Process multiple timeframes (1-minute, 5-minute, hourly, daily)
+- Incorporate both futures-specific metrics and underlying asset data
+- Calculate and track funding rates, basis, and term structure
+
+### 2. Technical Analysis Engine
+- Implement standard technical indicators (MACD, RSI, Bollinger Bands, etc.)
+- Develop custom indicators specific to futures markets
+- Identify chart patterns and key support/resistance levels
+- Track market volatility and liquidity metrics
+- Analyze open interest and futures contract roll dynamics
+
+### 3. Fundamental Analysis Integration
+- Process relevant economic indicators and news releases
+- Track on-chain metrics for crypto futures
+- Monitor inventory/supply data for commodity futures
+- Analyze earnings reports and financial metrics for equity futures
+- Process market sentiment from social media and news sources
+
+### 4. Machine Learning Model Architecture
+- Implement primary model using reinforcement learning paradigm
+- Design a reward function balancing profit/loss with risk metrics
+- Support both supervised learning (for prediction) and reinforcement learning (for action)
+- Implement deep learning models (LSTM, Transformer architectures) for sequence prediction
+- Enable transfer learning from general market data to specific futures contracts
+
+### 5. Risk Management System
+- Implement dynamic position sizing based on market conditions
+- Maintain balanced exposure across different futures contracts
+- Calculate and respect value-at-risk (VaR) constraints
+- Include circuit breakers for extreme market conditions
+- Manage margin requirements and liquidation risks unique to futures
+
+### 6. Self-Learning Framework
+- Record all trades and outcomes in a structured database
+- Periodically retrain models on expanded datasets
+- Implement A/B testing of strategy variants
+- Use genetic algorithms for parameter optimization
+- Implement Monte Carlo simulations for strategy robustness testing
+
+### 7. Market Environment Adaptation
+- Detect regime changes (trending vs. ranging markets)
+- Adapt to changing volatility conditions
+- Identify and respond to market manipulation
+- Adjust strategies based on contract expiration cycles
+- Calibrate to varying liquidity conditions
+
+### 8. Execution Engine
+- Implement smart order routing to minimize slippage
+- Develop execution algorithms (TWAP, VWAP, Iceberg orders)
+- Manage transaction costs and exchange fees
+- Handle exchange-specific API requirements
+- Implement circuit breakers for technical failures
+
+## Implementation Requirements
+
+### Data Infrastructure
+- Real-time market data feed connections
+- Historical data storage and retrieval system
+- Feature engineering pipeline
+- Metadata management for model versions and backtest results
+
+### Model Training Framework
+- Backtesting engine with realistic simulation of futures markets
+- Hyperparameter optimization framework
+- Cross-validation methodology for model evaluation
+- Model persistence and versioning
+
+### Deployment Architecture
+- High-availability cloud infrastructure
+- Low-latency networking setup
+- Logging and monitoring systems
+- Backup and disaster recovery protocols
+- Security measures for API keys and trading capital
+
+### Performance Metrics
+- Track Sharpe ratio, Sortino ratio, maximum drawdown
+- Monitor win rate, profit factor, average win/loss
+- Calculate futures-specific metrics (roll yield capture, funding rate arbitrage)
+- Compare performance across different market regimes
+- Analyze attribution of returns (technical signals vs. market timing)
+
+## Ethical and Regulatory Considerations
+- Implement safeguards against market manipulation
+- Ensure compliance with relevant regulations (CFTC, SEC, etc.)
+- Maintain detailed audit trails of all trading decisions
+- Include mechanisms to prevent flash-crash participation
+- Monitor for unintended consequences of trading strategies
+
+## Development Roadmap
+1. Begin with single futures contract backtesting environment
+2. Implement basic technical analysis and simple ML models
+3. Develop core risk management framework
+4. Expand to multi-contract portfolio management
+5. Integrate advanced ML techniques (deep RL, transformer models)
+6. Implement paper trading with real-time data
+7. Deploy gradual capital allocation with performance-based scaling
+
+## Additional Considerations
+- Implement market impact modeling for scaling strategies
+- Design for interoperability with existing trading systems
+- Include stress testing under extreme market scenarios
+- Develop intuitive visualizations of bot decision-making process
+- Create human oversight mechanisms for emergency intervention
+
+## Success Metrics
+The self-learning futures trading bot should demonstrate:
+- Consistent risk-adjusted returns across varying market conditions
+- Gradual improvement in performance metrics over time
+- Rapid adaptation to changing market regimes
+- Appropriate risk management during extreme events
+- Explainable decision-making for regulatory compliance
