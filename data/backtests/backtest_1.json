@@ -1,0 +1,79 @@
+{
+  "id": 1,
+  "strategy_id": 1,
+  "symbol": "NQ=F",
+  "timeframe": "15m",
+  "start_date": "2024-05-14T00:00:00",
+  "end_date": "2025-05-14T23:59:59.999999",
+  "total_return": 33.49125006532272,
+  "annualized_return": 22.071417579269735,
+  "sharpe_ratio": 1.329287913816759,
+  "max_drawdown": 8.843276084596097,
+  "win_rate": 72.72727272727273,
+  "profit_factor": 3.7868924003688726,
+  "trades_count": 6,
+  "execution_date": "2025-05-14T02:16:13.880775",
+  "trades": [
+    {
+      "entry_date": "2024-03-07T00:00:00",
+      "exit_date": "2024-03-09T00:00:00",
+      "entry_price": 99.06178471035012,
+      "exit_price": 101.5472834554869,
+      "direction": -1.0,
+      "profit_pct": -2.5090389320202577,
+      "duration": 2,
+      "backtest_id": 1
+    },
+    {
+      "entry_date": "2024-06-19T00:00:00",
+      "exit_date": "2024-06-20T00:00:00",
+      "entry_price": 73.06367921461964,
+      "exit_price": 80.7925898672395,
+      "direction": -1.0,
+      "profit_pct": -10.578321179141149,
+      "duration": 1,
+      "backtest_id": 1
+    },
+    {
+      "entry_date": "2024-06-23T00:00:00",
+      "exit_date": "2024-06-24T00:00:00",
+      "entry_price": 75.35617933032826,
+      "exit_price": 75.32492789404151,
+      "direction": -1.0,
+      "profit_pct": 0.041471630547718075,
+      "duration": 1,
+      "backtest_id": 1
+    },
+    {
+      "entry_date": "2024-08-01T00:00:00",
+      "exit_date": "2024-08-02T00:00:00",
+      "entry_price": 59.53758443990037,
+      "exit_price": 57.77082188156085,
+      "direction": -1.0,
+      "profit_pct": 2.967474369275025,
+      "duration": 1,
+      "backtest_id": 1
+    },
+    {
+      "entry_date": "2024-11-08T00:00:00",
+      "exit_date": "2024-11-13T00:00:00",
+      "entry_price": 92.99800395224598,
+      "exit_price": 90.64327321998668,
+      "direction": -1.0,
+      "profit_pct": 2.5320228738118344,
+      "duration": 5,
+      "backtest_id": 1
+    },
+    {
+      "entry_date": "2024-12-30T00:00:00",
+      "exit_date": "2024-12-31T00:00:00",
+      "entry_price": 102.34191840208331,
+      "exit_price": 98.93505920761605,
+      "direction": 1.0,
+      "profit_pct": -3.328899093998128,
+      "duration": 1,
+      "backtest_id": 1
+    }
+  ],
+  "strategy_name": "Moving Average Crossover Strategy"
+}
