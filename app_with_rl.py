@@ -84,7 +84,7 @@ with st.sidebar:
     # Navigation
     st.session_state.current_tab = st.radio(
         "Navigation", 
-        ['Dashboard', 'Data Analysis', 'Backtesting', 'Training', 'Live Trading', 'Performance', 'Storage']
+        ['Dashboard', 'Data Analysis', 'Backtesting', 'Training', 'Strategy Evolution', 'Live Trading', 'Performance', 'Storage']
     )
     
     # Symbol selection
@@ -751,6 +751,16 @@ else:
             episodes = st.slider("Training Episodes", 1, 50, 10)
             batch_size = st.slider("Batch Size", 8, 128, 32)
             
+            # Evolution parameters
+            save_evolution = st.checkbox("Save Evolution Checkpoints", True, 
+                                        help="Save intermediate models during training to visualize learning progression")
+            
+            if save_evolution:
+                evolution_interval = st.slider("Evolution Checkpoint Interval", 1, 10, 2, 
+                                             help="Number of episodes between evolution checkpoints")
+            else:
+                evolution_interval = 0
+            
             # Train-test split
             split_ratio = st.slider("Training Data Percentage", 50, 90, 80) / 100
             
@@ -776,8 +786,14 @@ else:
                             train_data, 
                             episodes=episodes, 
                             batch_size=batch_size, 
-                            save_model_name=model_name
+                            save_model_name=model_name,
+                            save_evolution=save_evolution,
+                            evolution_interval=evolution_interval
                         )
+                        
+                        # Store training results in session state for Strategy Evolution tab
+                        st.session_state.training_results = training_results
+                        st.session_state.last_trained_model = model_name
                         
                         # Evaluate on test data
                         st.text("Evaluating model on test data...")
@@ -822,6 +838,9 @@ else:
                         st.line_chart(progress_df.set_index('Episode')[['Reward']])
                         st.line_chart(progress_df.set_index('Episode')[['Portfolio Value']])
                         
+                        if save_evolution and training_results['evolution_models']:
+                            st.success(f"Saved {len(training_results['evolution_models'])} evolution checkpoints. Go to the Strategy Evolution tab to explore them.")
+                        
                     except Exception as e:
                         st.error(f"Error training model: {str(e)}")
             
@@ -855,6 +874,192 @@ else:
                         st.error(f"Error loading model: {str(e)}")
         else:
             st.warning("Please load market data first")
+            
+    # Strategy Evolution Tab
+    elif st.session_state.current_tab == 'Strategy Evolution':
+        st.header("Strategy Evolution")
+        
+        # Check if we have evolution data
+        if 'training_results' in st.session_state and 'evolution_models' in st.session_state.training_results and st.session_state.training_results['evolution_models']:
+            # Get evolution data
+            evolution_models = st.session_state.training_results['evolution_models']
+            
+            st.subheader("Learning Progress Over Time")
+            
+            # Create a DataFrame for evolution metrics
+            evolution_df = pd.DataFrame([
+                {
+                    'Episode': e['episode'],
+                    'Portfolio Value': e['portfolio_value'],
+                    'Reward': e['reward'],
+                    'Win Rate': e.get('win_rate', 0) * 100 if isinstance(e.get('win_rate', 0), float) else e.get('win_rate', 0),
+                    'Trades': e['trades'],
+                    'Avg Profit': e.get('avg_profit', 0),
+                    'Exploration Rate': e['epsilon'],
+                    'Model Path': e['model_path']
+                } for e in evolution_models
+            ])
+            
+            # Show evolution metrics as a table
+            st.dataframe(evolution_df[['Episode', 'Portfolio Value', 'Reward', 'Win Rate', 'Trades', 'Exploration Rate']], 
+                        use_container_width=True)
+            
+            # Create line charts to show progression of key metrics
+            st.subheader("Learning Curves")
+            
+            # Create tabs for different metrics
+            tab1, tab2, tab3, tab4 = st.tabs(["Portfolio Value", "Reward", "Win Rate", "Exploration Rate"])
+            
+            with tab1:
+                st.line_chart(evolution_df.set_index('Episode')[['Portfolio Value']])
+                st.write("As the model learns, it should generate higher portfolio values over time.")
+                
+            with tab2:
+                st.line_chart(evolution_df.set_index('Episode')[['Reward']])
+                st.write("Reward represents the cumulative rewards earned during each episode. Higher is better.")
+                
+            with tab3:
+                st.line_chart(evolution_df.set_index('Episode')[['Win Rate']])
+                st.write("Win rate shows the percentage of profitable trades. Should increase as the model improves.")
+                
+            with tab4:
+                st.line_chart(evolution_df.set_index('Episode')[['Exploration Rate']])
+                st.write("Exploration rate (epsilon) decreases over time as the model shifts from exploration to exploitation.")
+            
+            # Evolution model analysis
+            st.subheader("Evolution Model Analysis")
+            
+            # Select two models to compare
+            st.write("Compare models from different stages of evolution:")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                early_model_idx = st.selectbox("Select Early Model", 
+                                             range(len(evolution_models)),
+                                             format_func=lambda x: f"Episode {evolution_models[x]['episode']}")
+                early_model = evolution_models[early_model_idx]
+                
+            with col2:
+                late_model_idx = st.selectbox("Select Later Model", 
+                                            range(len(evolution_models)),
+                                            index=len(evolution_models)-1,
+                                            format_func=lambda x: f"Episode {evolution_models[x]['episode']}")
+                late_model = evolution_models[late_model_idx]
+            
+            # Show comparison
+            if early_model_idx != late_model_idx:
+                st.subheader("Model Comparison")
+                
+                # Calculate differences
+                portfolio_change = ((late_model['portfolio_value'] - early_model['portfolio_value']) / 
+                                    early_model['portfolio_value'] * 100)
+                reward_change = late_model['reward'] - early_model['reward']
+                win_rate_change = (late_model.get('win_rate', 0) - early_model.get('win_rate', 0)) * 100 if isinstance(late_model.get('win_rate', 0), float) else 0
+                
+                # Display comparisons
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Portfolio Value Change", 
+                             f"{portfolio_change:.2f}%", 
+                             delta=f"{portfolio_change:.2f}%")
+                with col2:
+                    st.metric("Reward Change", 
+                             f"{reward_change:.2f}", 
+                             delta=f"{reward_change:.2f}")
+                with col3:
+                    st.metric("Win Rate Change", 
+                             f"{win_rate_change:.2f}%", 
+                             delta=f"{win_rate_change:.2f}%")
+                
+                # Option to backtest these models
+                if st.button("Evaluate Selected Models"):
+                    with st.spinner("Evaluating models..."):
+                        try:
+                            # Load both models
+                            early_agent = simple_rl.TradingRLAgent.load_model(early_model['model_path'])
+                            late_agent = simple_rl.TradingRLAgent.load_model(late_model['model_path'])
+                            
+                            # Get test data (use the last 20% of the data)
+                            if st.session_state.data_loaded:
+                                data = st.session_state.market_data.copy().dropna()
+                                split_idx = int(len(data) * 0.8)
+                                test_data = data.iloc[split_idx:]
+                                
+                                # Evaluate both models
+                                early_results = simple_rl.evaluate_agent(early_agent, test_data)
+                                late_results = simple_rl.evaluate_agent(late_agent, test_data)
+                                
+                                # Display results
+                                st.subheader("Backtest Results")
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.write(f"### Early Model (Episode {early_model['episode']})")
+                                    st.metric("ROI", f"{early_results['roi']:.2f}%")
+                                    st.metric("Trades", early_results['trades'])
+                                    
+                                with col2:
+                                    st.write(f"### Later Model (Episode {late_model['episode']})")
+                                    st.metric("ROI", f"{late_results['roi']:.2f}%")
+                                    st.metric("Trades", late_results['trades'])
+                                
+                                # Calculate improvement
+                                roi_improvement = late_results['roi'] - early_results['roi']
+                                
+                                st.info(f"The later model {late_model['episode']} {'outperforms' if roi_improvement > 0 else 'underperforms'} the early model {early_model['episode']} by {abs(roi_improvement):.2f}% ROI.")
+                            else:
+                                st.warning("Please load market data first to evaluate models")
+                                
+                        except Exception as e:
+                            st.error(f"Error evaluating models: {str(e)}")
+            
+            # Strategy insights
+            st.subheader("Strategy Insights")
+            
+            st.write("""
+            ## How Models Evolve
+            
+            1. **Exploration to Exploitation**: The model starts by exploring random actions to discover profitable strategies, 
+               then gradually shifts to exploiting known profitable patterns.
+            
+            2. **Learning from Mistakes**: Early models make many mistakes but learn from them to improve over time.
+            
+            3. **Pattern Recognition**: As training progresses, the model learns to recognize price patterns and indicators 
+               that have historically led to profitable trades.
+            
+            4. **Risk Management**: Later models typically develop better risk management, with higher win rates and 
+               more consistent returns.
+            """)
+            
+        elif 'training_results' in st.session_state:
+            st.warning("No evolution data found. Train a model with 'Save Evolution Checkpoints' enabled.")
+        else:
+            st.info("No training has been performed yet. Go to the Training tab to train a model with evolution tracking.")
+            
+            # Show example of what to expect
+            st.subheader("Example Evolution")
+            
+            # Create sample data for illustration
+            sample_episodes = range(1, 11)
+            sample_portfolio = [10000 * (1 + i * 0.05 + np.random.normal(0, 0.02)) for i in range(10)]
+            sample_win_rates = [40 + i * 5 + np.random.normal(0, 2) for i in range(10)]
+            
+            # Create sample DataFrame
+            sample_df = pd.DataFrame({
+                'Episode': sample_episodes,
+                'Portfolio Value': sample_portfolio,
+                'Win Rate (%)': sample_win_rates
+            })
+            
+            # Show sample charts
+            st.line_chart(sample_df.set_index('Episode')[['Portfolio Value']])
+            st.line_chart(sample_df.set_index('Episode')[['Win Rate (%)']])
+            
+            st.write("""
+            This is an example of how the strategy evolution charts will look after training.
+            When you train a model with 'Save Evolution Checkpoints' enabled, you'll see the actual
+            learning progression of your model here.
+            """)
     
     # Live Trading Tab
     elif st.session_state.current_tab == 'Live Trading':

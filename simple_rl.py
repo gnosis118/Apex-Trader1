@@ -271,6 +271,10 @@ class TradingEnvironment:
         current_price = self.data.iloc[self.current_step]['Close']
         prev_portfolio_value = self.balance + (self.shares_held * current_price)
         
+        # Initialize trade tracking variables
+        trade_completed = False
+        trade_info = None
+        
         # Execute action
         if action == 1:  # Buy
             # Calculate max shares that can be bought
@@ -290,11 +294,31 @@ class TradingEnvironment:
                 'type': 'buy',
                 'shares': shares_bought,
                 'price': current_price,
-                'cost': cost
+                'cost': cost,
+                'date': self.data.index[self.current_step] if hasattr(self.data.index, '__getitem__') else None
             })
             
         elif action == 2:  # Sell
             if self.shares_held > 0:
+                # Check for paired trades (buy followed by sell) to calculate trade profit
+                for i in range(len(self.trades)-1, -1, -1):
+                    if self.trades[i]['type'] == 'buy':
+                        # Found matching buy trade
+                        buy_price = self.trades[i]['price']
+                        sell_price = current_price
+                        # Calculate profit percentage
+                        profit_pct = (sell_price - buy_price) / buy_price * 100
+                        trade_completed = True
+                        trade_info = {
+                            'entry_date': self.trades[i].get('date'),
+                            'exit_date': self.data.index[self.current_step] if hasattr(self.data.index, '__getitem__') else None,
+                            'entry_price': buy_price,
+                            'exit_price': sell_price,
+                            'profit_pct': profit_pct,
+                            'type': 'long'
+                        }
+                        break
+                
                 # Sell all shares
                 sale_value = self.shares_held * current_price * (1 - self.transaction_fee)
                 
@@ -309,7 +333,8 @@ class TradingEnvironment:
                     'type': 'sell',
                     'shares': self.shares_held,
                     'price': current_price,
-                    'value': sale_value
+                    'value': sale_value,
+                    'date': self.data.index[self.current_step] if hasattr(self.data.index, '__getitem__') else None
                 })
         
         # Move to next step
@@ -319,6 +344,25 @@ class TradingEnvironment:
         if done:
             # If done, sell any remaining shares
             if self.shares_held > 0:
+                # Check for paired trades for the final sell
+                for i in range(len(self.trades)-1, -1, -1):
+                    if self.trades[i]['type'] == 'buy':
+                        # Found matching buy trade
+                        buy_price = self.trades[i]['price']
+                        sell_price = current_price
+                        # Calculate profit percentage
+                        profit_pct = (sell_price - buy_price) / buy_price * 100
+                        trade_completed = True
+                        trade_info = {
+                            'entry_date': self.trades[i].get('date'),
+                            'exit_date': self.data.index[self.current_step] if hasattr(self.data.index, '__getitem__') else None,
+                            'entry_price': buy_price,
+                            'exit_price': sell_price,
+                            'profit_pct': profit_pct,
+                            'type': 'long'
+                        }
+                        break
+                
                 sale_value = self.shares_held * current_price * (1 - self.transaction_fee)
                 self.balance += sale_value
                 self.total_sales_value += self.shares_held * current_price
@@ -337,8 +381,13 @@ class TradingEnvironment:
             'portfolio_value': current_portfolio_value,
             'balance': self.balance,
             'shares_held': self.shares_held,
-            'current_price': current_price
+            'current_price': current_price,
+            'trade_completed': trade_completed
         }
+        
+        # Add trade info if a trade was completed
+        if trade_completed and trade_info:
+            info['trade'] = trade_info
         
         return next_state, reward, done, info
     
@@ -366,7 +415,7 @@ class TradingEnvironment:
         return info
 
 
-def train_agent(data, episodes=10, batch_size=32, save_model_name=None):
+def train_agent(data, episodes=10, batch_size=32, save_model_name=None, save_evolution=True, evolution_interval=1):
     """
     Train an RL agent on the given data
     
@@ -380,6 +429,10 @@ def train_agent(data, episodes=10, batch_size=32, save_model_name=None):
         Batch size for replay
     save_model_name: str, optional
         Name to save the model under (if None, model is not saved)
+    save_evolution: bool, optional
+        Whether to save intermediate models to show evolution
+    evolution_interval: int, optional
+        Number of episodes between evolution checkpoints
         
     Returns:
     --------
@@ -396,7 +449,11 @@ def train_agent(data, episodes=10, batch_size=32, save_model_name=None):
     results = {
         'episode_rewards': [],
         'portfolio_values': [],
-        'trade_counts': []
+        'trade_counts': [],
+        'win_rates': [],
+        'avg_profit_per_trade': [],
+        'exploration_rates': [],
+        'evolution_models': []  # Store paths to evolution models
     }
     
     # Training loop
@@ -407,6 +464,7 @@ def train_agent(data, episodes=10, batch_size=32, save_model_name=None):
         done = False
         
         # Episode loop
+        trades_this_episode = []
         while not done:
             # Choose action
             action = agent.act(state)
@@ -422,21 +480,57 @@ def train_agent(data, episodes=10, batch_size=32, save_model_name=None):
             
             # Accumulate reward
             episode_reward += reward
+            
+            # Track trade if completed
+            if 'trade_completed' in info and info['trade_completed']:
+                trades_this_episode.append(info['trade'])
         
         # Train agent
         agent.replay(batch_size)
+        
+        # Calculate additional metrics for this episode
+        if trades_this_episode:
+            # Win rate
+            profits = [trade.get('profit_pct', 0) for trade in trades_this_episode]
+            wins = sum(p > 0 for p in profits)
+            win_rate = wins / len(trades_this_episode) if trades_this_episode else 0
+            
+            # Average profit per trade
+            avg_profit = sum(profits) / len(trades_this_episode) if trades_this_episode else 0
+        else:
+            win_rate = 0
+            avg_profit = 0
         
         # Record results
         results['episode_rewards'].append(episode_reward)
         results['portfolio_values'].append(info['portfolio_value'])
         results['trade_counts'].append(len(env.trades))
+        results['win_rates'].append(win_rate)
+        results['avg_profit_per_trade'].append(avg_profit)
+        results['exploration_rates'].append(agent.epsilon)
+        
+        # Save evolution model if requested
+        if save_evolution and (episode % evolution_interval == 0 or episode == episodes - 1):
+            if save_model_name:
+                evolution_model_name = f"{save_model_name}_evolution_{episode+1}"
+                model_path = agent.save_model(evolution_model_name)
+                results['evolution_models'].append({
+                    'episode': episode + 1,
+                    'model_path': model_path,
+                    'epsilon': agent.epsilon,
+                    'reward': episode_reward,
+                    'portfolio_value': info['portfolio_value'],
+                    'trades': len(env.trades),
+                    'win_rate': win_rate,
+                    'avg_profit': avg_profit
+                })
         
         # Print progress
         print(f"Episode: {episode+1}/{episodes}, Reward: {episode_reward:.2f}, "
               f"Portfolio Value: {info['portfolio_value']:.2f}, "
-              f"Trades: {len(env.trades)}")
+              f"Trades: {len(env.trades)}, Win Rate: {win_rate:.2f}")
     
-    # Save model if requested
+    # Save final model if requested
     if save_model_name:
         agent.save_model(save_model_name)
     
