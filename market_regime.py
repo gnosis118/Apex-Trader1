@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+import json
+import os
+from datetime import datetime
 
 class MarketRegimeDetector:
     """
@@ -7,9 +10,37 @@ class MarketRegimeDetector:
     Uses multiple factors to determine the current market state.
     """
     
-    def __init__(self):
-        """Initialize the regime detector"""
+    def __init__(self, history_file="regimes_history.json", strategy_file="regime_strategies.json"):
+        """
+        Initialize the regime detector
+        
+        Parameters:
+        -----------
+        history_file: str
+            File to save/load regime history
+        strategy_file: str
+            File to save/load strategy optimization results
+        """
         self.regime_history = []
+        self.history_file = history_file
+        self.strategy_file = strategy_file
+        self.strategy_performance = {}
+        
+        # Load previous regime history if it exists
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r') as f:
+                    self.regime_history = json.load(f)
+            except Exception as e:
+                print(f"Error loading regime history: {e}")
+        
+        # Load previous strategy optimization results if they exist
+        if os.path.exists(strategy_file):
+            try:
+                with open(strategy_file, 'r') as f:
+                    self.strategy_performance = json.load(f)
+            except Exception as e:
+                print(f"Error loading strategy performance: {e}")
     
     def detect_regime(self, data, lookback_period=20):
         """
@@ -129,15 +160,26 @@ class MarketRegimeDetector:
             confidence = 0.5
         
         # Construct result
+        # Create result with timestamp
         result = {
             "regime": main_regime,
             "confidence": float(confidence),
-            "indicators": regime_indicators
+            "indicators": regime_indicators,
+            "timestamp": datetime.now().isoformat(),
+            "symbol": data.get('symbol', "unknown") if hasattr(data, 'get') else "unknown"
         }
         
+        # Add to history with limits
         self.regime_history.append(result)
         if len(self.regime_history) > 100:
             self.regime_history = self.regime_history[-100:]
+        
+        # Save history to file
+        try:
+            with open(self.history_file, 'w') as f:
+                json.dump(self.regime_history, f, indent=2)
+        except Exception as e:
+            print(f"Error saving regime history: {e}")
             
         return result
     
@@ -241,6 +283,127 @@ class MarketRegimeDetector:
             List of regime dictionaries
         """
         return self.regime_history
+    
+    def update_strategy_performance(self, regime_type, strategy_params, performance_metrics):
+        """
+        Update performance metrics for a specific strategy in a specific regime
+        
+        Parameters:
+        -----------
+        regime_type: str
+            The type of market regime (e.g., "TRENDING_UP", "RANGING")
+        strategy_params: dict
+            The parameters used for the strategy
+        performance_metrics: dict
+            Performance metrics from backtesting (e.g., sharpe_ratio, profit_factor)
+        """
+        if regime_type not in self.strategy_performance:
+            self.strategy_performance[regime_type] = []
+        
+        # Add timestamp to track when this performance was recorded
+        strategy_record = {
+            "params": strategy_params,
+            "metrics": performance_metrics,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        self.strategy_performance[regime_type].append(strategy_record)
+        
+        # Keep only the top 10 performing strategies for each regime
+        if len(self.strategy_performance[regime_type]) > 10:
+            # Sort by a key performance metric (e.g., sharpe ratio)
+            key_metric = 'sharpe_ratio' if 'sharpe_ratio' in performance_metrics else 'total_return'
+            self.strategy_performance[regime_type].sort(
+                key=lambda x: x['metrics'].get(key_metric, 0), 
+                reverse=True
+            )
+            # Keep only top 10
+            self.strategy_performance[regime_type] = self.strategy_performance[regime_type][:10]
+        
+        # Save to file
+        try:
+            with open(self.strategy_file, 'w') as f:
+                json.dump(self.strategy_performance, f, indent=2)
+        except Exception as e:
+            print(f"Error saving strategy performance: {e}")
+    
+    def get_best_strategy(self, regime_type, key_metric='sharpe_ratio'):
+        """
+        Get the best performing strategy for a specific regime
+        
+        Parameters:
+        -----------
+        regime_type: str
+            The type of market regime
+        key_metric: str
+            The metric to use for determining the best strategy
+            
+        Returns:
+        --------
+        dict
+            The parameters of the best performing strategy for this regime
+        """
+        # If we don't have data for this regime, use the default strategy
+        if regime_type not in self.strategy_performance or not self.strategy_performance[regime_type]:
+            return self.get_optimal_strategy({"regime": regime_type, "confidence": 1.0})
+        
+        # Sort by the key metric and return the best one
+        strategies = self.strategy_performance[regime_type]
+        strategies.sort(key=lambda x: x['metrics'].get(key_metric, 0), reverse=True)
+        
+        # Return the parameters of the best strategy
+        return strategies[0]['params']
+    
+    def analyze_regime_transitions(self):
+        """
+        Analyze transitions between different regimes to predict upcoming changes
+        
+        Returns:
+        --------
+        dict
+            Analysis of regime transitions and predictions
+        """
+        if len(self.regime_history) < 5:
+            return {"prediction": "Insufficient data for transition analysis"}
+        
+        # Count transitions from one regime to another
+        transitions = {}
+        for i in range(len(self.regime_history) - 1):
+            from_regime = self.regime_history[i]["regime"]
+            to_regime = self.regime_history[i + 1]["regime"]
+            
+            if from_regime not in transitions:
+                transitions[from_regime] = {}
+            
+            if to_regime not in transitions[from_regime]:
+                transitions[from_regime][to_regime] = 0
+                
+            transitions[from_regime][to_regime] += 1
+        
+        # Calculate probabilities of transitions
+        probabilities = {}
+        for from_regime, to_regimes in transitions.items():
+            total = sum(to_regimes.values())
+            probabilities[from_regime] = {to: count / total for to, count in to_regimes.items()}
+        
+        # Predict next regime from current one
+        current_regime = self.regime_history[-1]["regime"]
+        next_regime_prediction = "UNKNOWN"
+        probability = 0.0
+        
+        if current_regime in probabilities:
+            next_regime_prediction = max(
+                probabilities[current_regime].items(), 
+                key=lambda x: x[1]
+            )[0]
+            probability = probabilities[current_regime].get(next_regime_prediction, 0.0)
+        
+        return {
+            "current_regime": current_regime,
+            "predicted_next_regime": next_regime_prediction,
+            "probability": probability,
+            "transition_matrix": probabilities
+        }
 
 
 def analyze_market_structure(data, period=20):

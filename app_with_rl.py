@@ -411,6 +411,31 @@ else:
                 unsafe_allow_html=True
             )
             
+            # Add regime transition analysis if we have sufficient history
+            transition_analysis = detector.analyze_regime_transitions()
+            
+            if "prediction" not in transition_analysis:
+                st.info(f"Predicted next regime: **{transition_analysis['predicted_next_regime']}** " 
+                       f"(Probability: {transition_analysis['probability']:.2f})")
+            
+                # Display the transition matrix if it exists
+                if st.checkbox("Show Regime Transition Analysis", False):
+                    st.subheader("Regime Transition Probabilities")
+                    
+                    # Create a more readable format for the transition matrix
+                    transition_data = []
+                    for from_regime, to_regimes in transition_analysis.get('transition_matrix', {}).items():
+                        for to_regime, probability in to_regimes.items():
+                            transition_data.append({
+                                "From Regime": from_regime,
+                                "To Regime": to_regime,
+                                "Probability": f"{probability:.2f}"
+                            })
+                    
+                    if transition_data:
+                        transitions_df = pd.DataFrame(transition_data)
+                        st.dataframe(transitions_df)
+            
             # Regime indicators
             st.subheader("Regime Indicators")
             
@@ -475,6 +500,36 @@ else:
             
             # Market structure analysis
             st.subheader("Market Structure Analysis")
+            
+            # Add section for regime history
+            with st.expander("Regime History", expanded=False):
+                st.subheader("Historical Regime Changes")
+                
+                # Get regime history
+                regime_history = detector.get_regime_history()
+                
+                if regime_history:
+                    # Create a data frame for display
+                    history_data = []
+                    for entry in regime_history:
+                        # Skip entries without timestamp (backward compatibility)
+                        if 'timestamp' not in entry:
+                            continue
+                        
+                        history_data.append({
+                            "Timestamp": entry.get('timestamp', ''),
+                            "Regime": entry.get('regime', 'UNKNOWN'),
+                            "Confidence": f"{entry.get('confidence', 0.0):.2f}",
+                            "Symbol": entry.get('symbol', 'unknown')
+                        })
+                    
+                    if history_data:
+                        history_df = pd.DataFrame(history_data)
+                        st.dataframe(history_df)
+                    else:
+                        st.info("No recorded regime history with timestamps available yet.")
+                else:
+                    st.info("No regime history recorded yet.")
             
             # Analyze market structure
             market_structure = market_regime.analyze_market_structure(analysis_data, period=lookback_period)
@@ -700,16 +755,56 @@ else:
             
         elif strategy_type == "Combined Strategy":
             st.subheader("Combined Strategy Parameters")
-            # Let user select which indicators to include
-            use_ma = st.checkbox("Use Moving Averages", True)
-            use_rsi = st.checkbox("Use RSI", True)
+            
+            # If optimal strategy is available and user wants to use it
+            if use_optimal and hasattr(st.session_state, 'optimal_strategy'):
+                # Use optimal parameters from regime detection
+                optimal_strategy = st.session_state.optimal_strategy
+                st.info("Using regime-optimized parameters")
+                
+                # Let user select which indicators to include, with optimized defaults
+                use_ma = st.checkbox("Use Moving Averages", optimal_strategy.get('use_ma', True))
+                use_rsi = st.checkbox("Use RSI", optimal_strategy.get('use_rsi', True))
+                
+                # Risk parameters from optimal strategy
+                position_size = st.slider("Position Size (%)", 1, 100, 
+                                         int(optimal_strategy.get('position_size', 0.1) * 100), 
+                                         key="comb_position_size")
+                stop_loss = st.slider("Stop Loss (%)", 1, 20, 
+                                     int(optimal_strategy.get('stop_loss', 0.05) * 100), 
+                                     key="comb_stop_loss")
+                take_profit = st.slider("Take Profit (%)", 1, 30, 
+                                       int(optimal_strategy.get('take_profit', 0.1) * 100), 
+                                       key="comb_take_profit")
+            else:
+                # Default indicator selection
+                use_ma = st.checkbox("Use Moving Averages", True)
+                use_rsi = st.checkbox("Use RSI", True)
+                
+                # Default risk parameters
+                position_size = st.slider("Position Size (%)", 1, 100, 10, key="comb_position_size")
+                stop_loss = st.slider("Stop Loss (%)", 1, 20, 5, key="comb_stop_loss")
+                take_profit = st.slider("Take Profit (%)", 1, 30, 10, key="comb_take_profit")
+            
             params["use_ma"] = use_ma
             params["use_rsi"] = use_rsi
+            params["position_size"] = position_size / 100.0
+            params["stop_loss"] = stop_loss / 100.0
+            params["take_profit"] = take_profit / 100.0
             
             # Only show parameters for selected indicators
             if use_ma:
-                fast_ma = st.slider("Fast MA Period", 5, 50, st.session_state.ma_fast, key="comb_fast_ma")
-                slow_ma = st.slider("Slow MA Period", 20, 200, st.session_state.ma_slow, key="comb_slow_ma")
+                if use_optimal and hasattr(st.session_state, 'optimal_strategy'):
+                    fast_ma = st.slider("Fast MA Period", 5, 50, 
+                                       optimal_strategy.get('fast_ma', st.session_state.ma_fast), 
+                                       key="comb_fast_ma")
+                    slow_ma = st.slider("Slow MA Period", 20, 200, 
+                                       optimal_strategy.get('slow_ma', st.session_state.ma_slow), 
+                                       key="comb_slow_ma")
+                else:
+                    fast_ma = st.slider("Fast MA Period", 5, 50, st.session_state.ma_fast, key="comb_fast_ma")
+                    slow_ma = st.slider("Slow MA Period", 20, 200, st.session_state.ma_slow, key="comb_slow_ma")
+                
                 params["fast_ma"] = fast_ma
                 params["slow_ma"] = slow_ma
             else:
@@ -717,9 +812,21 @@ else:
                 params["slow_ma"] = st.session_state.ma_slow
             
             if use_rsi:
-                rsi_period = st.slider("RSI Period", 7, 30, st.session_state.rsi_period, key="comb_rsi_period")
-                rsi_overbought = st.slider("RSI Overbought", 60, 90, st.session_state.rsi_overbought, key="comb_rsi_overbought")
-                rsi_oversold = st.slider("RSI Oversold", 10, 40, st.session_state.rsi_oversold, key="comb_rsi_oversold")
+                if use_optimal and hasattr(st.session_state, 'optimal_strategy'):
+                    rsi_period = st.slider("RSI Period", 7, 30, 
+                                          optimal_strategy.get('rsi_period', st.session_state.rsi_period), 
+                                          key="comb_rsi_period")
+                    rsi_overbought = st.slider("RSI Overbought", 60, 90, 
+                                              optimal_strategy.get('rsi_overbought', st.session_state.rsi_overbought), 
+                                              key="comb_rsi_overbought")
+                    rsi_oversold = st.slider("RSI Oversold", 10, 40, 
+                                            optimal_strategy.get('rsi_oversold', st.session_state.rsi_oversold), 
+                                            key="comb_rsi_oversold")
+                else:
+                    rsi_period = st.slider("RSI Period", 7, 30, st.session_state.rsi_period, key="comb_rsi_period")
+                    rsi_overbought = st.slider("RSI Overbought", 60, 90, st.session_state.rsi_overbought, key="comb_rsi_overbought")
+                    rsi_oversold = st.slider("RSI Oversold", 10, 40, st.session_state.rsi_oversold, key="comb_rsi_oversold")
+                
                 params["rsi_period"] = rsi_period
                 params["rsi_overbought"] = rsi_overbought
                 params["rsi_oversold"] = rsi_oversold
