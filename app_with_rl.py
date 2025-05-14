@@ -9,6 +9,8 @@ import os
 import file_storage as storage
 # Import reinforcement learning module
 import simple_rl
+# Import market regime analysis
+import market_regime
 
 # Set page configuration
 st.set_page_config(
@@ -84,7 +86,7 @@ with st.sidebar:
     # Navigation
     st.session_state.current_tab = st.radio(
         "Navigation", 
-        ['Dashboard', 'Data Analysis', 'Backtesting', 'Training', 'Strategy Evolution', 'Live Trading', 'Performance', 'Storage']
+        ['Dashboard', 'Data Analysis', 'Market Regime', 'Backtesting', 'Training', 'Strategy Evolution', 'Live Trading', 'Performance', 'Storage']
     )
     
     # Symbol selection
@@ -343,6 +345,210 @@ else:
     elif st.session_state.current_tab == 'Data Analysis':
         st.header("Data Analysis")
         
+    # Market Regime Analysis Tab
+    elif st.session_state.current_tab == 'Market Regime':
+        st.header("Market Regime Analysis")
+        
+        if not st.session_state.data_loaded:
+            st.warning("Please load market data first")
+        else:
+            # Initialize the market regime detector
+            detector = market_regime.MarketRegimeDetector()
+            
+            # Analyze current market regime
+            data = st.session_state.market_data.copy()
+            
+            # Detection parameters
+            st.subheader("Detection Parameters")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                lookback_period = st.slider("Lookback Period", 10, 100, 50, 
+                                          help="Number of periods to analyze for regime detection")
+            
+            with col2:
+                period_type = st.selectbox("Analysis Period", 
+                                          ["Recent", "Full Dataset", "Custom Range"],
+                                          help="Timeframe to analyze")
+            
+            # Determine data range for analysis
+            if period_type == "Recent":
+                analysis_data = data.iloc[-lookback_period:] if len(data) > lookback_period else data
+            elif period_type == "Custom Range":
+                # Allow custom date range selection
+                date_range = st.slider("Select Date Range",
+                                      min_value=data.index.min().to_pydatetime(),
+                                      max_value=data.index.max().to_pydatetime(),
+                                      value=(data.index.min().to_pydatetime(), data.index.max().to_pydatetime()))
+                
+                start_date, end_date = date_range
+                analysis_data = data.loc[start_date:end_date]
+            else:  # Full Dataset
+                analysis_data = data
+            
+            # Run the regime detection
+            regime = detector.detect_regime(analysis_data, lookback_period=min(lookback_period, len(analysis_data)))
+            
+            # Display current regime
+            st.subheader("Current Market Regime")
+            
+            # Display regime with color coding
+            regime_color = {
+                "TRENDING_UP": "green",
+                "TRENDING_DOWN": "red",
+                "RANGING": "blue",
+                "VOLATILE": "orange",
+                "MIXED": "gray",
+                "UNKNOWN": "gray"
+            }
+            
+            # Main regime status
+            st.markdown(
+                f"<h2 style='text-align: center; color: {regime_color.get(regime['regime'], 'white')}; "
+                f"background-color: {regime_color.get(regime['regime'], 'gray')}30; "
+                f"padding: 10px; border-radius: 5px;'>"
+                f"{regime['regime']} (Confidence: {regime['confidence']:.2f})</h2>", 
+                unsafe_allow_html=True
+            )
+            
+            # Regime indicators
+            st.subheader("Regime Indicators")
+            
+            # Create metrics
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                trend_strength = regime["indicators"]["trend_strength"]
+                st.metric("Trend Strength", 
+                         f"{trend_strength:.2f}", 
+                         delta=f"{trend_strength:.2f}")
+                
+            with col2:
+                volatility = regime["indicators"]["volatility"]
+                st.metric("Volatility", 
+                         f"{volatility:.2f}", 
+                         delta=f"{volatility:.2f}")
+                
+            with col3:
+                ranging_vs_trending = regime["indicators"]["ranging_vs_trending"]
+                st.metric("Range vs Trend", 
+                         f"{ranging_vs_trending:.2f}", 
+                         delta=f"{ranging_vs_trending:.2f}")
+            
+            # Recommended strategy
+            st.subheader("Optimized Strategy Parameters")
+            
+            # Get optimal strategy for current regime
+            optimal_strategy = detector.get_optimal_strategy(regime)
+            
+            # Display strategy parameters based on regime
+            st.info(f"Based on the {regime['regime']} regime, the following strategy parameters are recommended:")
+            
+            # Create columns for strategy display
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Technical Indicators:**")
+                st.write(f"- Use Moving Averages: {'Yes' if optimal_strategy.get('use_ma', True) else 'No'}")
+                if optimal_strategy.get('use_ma', True):
+                    st.write(f"- Fast MA Period: {optimal_strategy.get('fast_ma', 20)}")
+                    st.write(f"- Slow MA Period: {optimal_strategy.get('slow_ma', 50)}")
+                
+                st.write(f"- Use RSI: {'Yes' if optimal_strategy.get('use_rsi', True) else 'No'}")
+                if optimal_strategy.get('use_rsi', True):
+                    st.write(f"- RSI Period: {optimal_strategy.get('rsi_period', 14)}")
+                    st.write(f"- RSI Overbought: {optimal_strategy.get('rsi_overbought', 70)}")
+                    st.write(f"- RSI Oversold: {optimal_strategy.get('rsi_oversold', 30)}")
+            
+            with col2:
+                st.write("**Risk Management:**")
+                st.write(f"- Position Size: {optimal_strategy.get('position_size', 0.1) * 100:.1f}%")
+                st.write(f"- Stop Loss: {optimal_strategy.get('stop_loss', 0.05) * 100:.1f}%")
+                st.write(f"- Take Profit: {optimal_strategy.get('take_profit', 0.1) * 100:.1f}%")
+                st.write(f"- Max Drawdown: {optimal_strategy.get('max_drawdown', 0.25) * 100:.1f}%")
+            
+            # Apply recommended strategy to backtest
+            if st.button("Apply to Backtesting"):
+                # Store optimal strategy in session state
+                st.session_state.optimal_strategy = optimal_strategy
+                st.success("Strategy parameters applied! Go to Backtesting tab to run the optimized strategy.")
+            
+            # Market structure analysis
+            st.subheader("Market Structure Analysis")
+            
+            # Analyze market structure
+            market_structure = market_regime.analyze_market_structure(analysis_data, period=lookback_period)
+            
+            # Display support and resistance levels
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Support Levels:**")
+                if market_structure["supports"]:
+                    for level in market_structure["supports"]:
+                        st.write(f"- {level:.2f}")
+                else:
+                    st.write("No significant support levels detected")
+            
+            with col2:
+                st.write("**Resistance Levels:**")
+                if market_structure["resistances"]:
+                    for level in market_structure["resistances"]:
+                        st.write(f"- {level:.2f}")
+                else:
+                    st.write("No significant resistance levels detected")
+            
+            # Price chart with levels
+            st.subheader("Price Chart with Key Levels")
+            
+            # Create a price chart
+            chart_data = analysis_data[['Close']].copy()
+            
+            # Add horizontal lines for key levels
+            st.line_chart(chart_data)
+            
+            # Add a description based on the regime
+            if regime["regime"] == "TRENDING_UP":
+                st.success("""
+                **Trading Strategy for Uptrend:**
+                - Focus on trend-following strategies
+                - Buy on pullbacks to key support levels or moving averages
+                - Use wider stops to avoid getting shaken out of the trend
+                - Look for continuation patterns
+                """)
+            elif regime["regime"] == "TRENDING_DOWN":
+                st.error("""
+                **Trading Strategy for Downtrend:**
+                - Focus on trend-following strategies (short positions)
+                - Sell on rallies to key resistance levels or moving averages
+                - Use proper risk management as downtrends can be volatile
+                - Be cautious of sudden reversals and policy interventions
+                """)
+            elif regime["regime"] == "RANGING":
+                st.info("""
+                **Trading Strategy for Range-Bound Market:**
+                - Focus on mean-reversion strategies
+                - Buy near support and sell near resistance
+                - Use oscillators like RSI for overbought/oversold conditions
+                - Be aware that ranges eventually break into trends
+                """)
+            elif regime["regime"] == "VOLATILE":
+                st.warning("""
+                **Trading Strategy for Volatile Market:**
+                - Reduce position sizes
+                - Widen stop losses to accommodate larger price swings
+                - Expect false breakouts and whipsaws
+                - Consider option strategies for directional uncertainty
+                """)
+            else:
+                st.write("""
+                **Trading Strategy for Mixed/Uncertain Market:**
+                - Reduce exposure and position sizes
+                - Wait for clearer signals before committing capital
+                - Focus on shorter timeframes for more clarity
+                - Monitor for regime change into a more definable pattern
+                """)
+        
         # Basic statistics
         st.subheader("Market Data Statistics")
         
@@ -394,6 +600,15 @@ else:
     elif st.session_state.current_tab == 'Backtesting':
         st.header("Strategy Backtesting")
         
+        # Check if we have optimal strategy from Market Regime tab
+        has_optimal_strategy = hasattr(st.session_state, 'optimal_strategy')
+        
+        if has_optimal_strategy:
+            st.success("✅ Optimal strategy parameters from Market Regime analysis are available!")
+            use_optimal = st.checkbox("Use Regime-Optimized Strategy", value=True)
+        else:
+            use_optimal = False
+        
         # Strategy selection
         strategy_type = st.selectbox(
             "Select Strategy Type",
@@ -404,19 +619,84 @@ else:
         params = {}
         if strategy_type == "Moving Average Crossover":
             st.subheader("Moving Average Crossover Parameters")
-            fast_ma = st.slider("Fast MA Period", 5, 50, st.session_state.ma_fast, key="bt_fast_ma")
-            slow_ma = st.slider("Slow MA Period", 20, 200, st.session_state.ma_slow, key="bt_slow_ma")
+            
+            # If optimal strategy is available and user wants to use it
+            if use_optimal and hasattr(st.session_state, 'optimal_strategy') and st.session_state.optimal_strategy.get('use_ma', True):
+                # Use optimal parameters from regime detection
+                optimal_strategy = st.session_state.optimal_strategy
+                st.info("Using regime-optimized parameters")
+                
+                fast_ma = st.slider("Fast MA Period", 5, 50, 
+                                   optimal_strategy.get('fast_ma', st.session_state.ma_fast), 
+                                   key="bt_fast_ma")
+                slow_ma = st.slider("Slow MA Period", 20, 200, 
+                                   optimal_strategy.get('slow_ma', st.session_state.ma_slow), 
+                                   key="bt_slow_ma")
+                position_size = st.slider("Position Size (%)", 1, 100, 
+                                         int(optimal_strategy.get('position_size', 0.1) * 100), 
+                                         key="bt_position_size")
+                stop_loss = st.slider("Stop Loss (%)", 1, 20, 
+                                     int(optimal_strategy.get('stop_loss', 0.05) * 100), 
+                                     key="bt_stop_loss")
+                take_profit = st.slider("Take Profit (%)", 1, 30, 
+                                       int(optimal_strategy.get('take_profit', 0.1) * 100), 
+                                       key="bt_take_profit")
+            else:
+                # Use default parameters
+                fast_ma = st.slider("Fast MA Period", 5, 50, st.session_state.ma_fast, key="bt_fast_ma")
+                slow_ma = st.slider("Slow MA Period", 20, 200, st.session_state.ma_slow, key="bt_slow_ma")
+                position_size = st.slider("Position Size (%)", 1, 100, 10, key="bt_position_size")
+                stop_loss = st.slider("Stop Loss (%)", 1, 20, 5, key="bt_stop_loss")
+                take_profit = st.slider("Take Profit (%)", 1, 30, 10, key="bt_take_profit")
+            
             params["fast_ma"] = fast_ma
             params["slow_ma"] = slow_ma
+            params["position_size"] = position_size / 100.0
+            params["stop_loss"] = stop_loss / 100.0
+            params["take_profit"] = take_profit / 100.0
             
         elif strategy_type == "RSI Mean Reversion":
             st.subheader("RSI Mean Reversion Parameters")
-            rsi_period = st.slider("RSI Period", 7, 30, st.session_state.rsi_period, key="bt_rsi_period")
-            rsi_overbought = st.slider("Overbought Level", 60, 90, st.session_state.rsi_overbought, key="bt_rsi_overbought")
-            rsi_oversold = st.slider("Oversold Level", 10, 40, st.session_state.rsi_oversold, key="bt_rsi_oversold")
+            
+            # If optimal strategy is available and user wants to use it
+            if use_optimal and hasattr(st.session_state, 'optimal_strategy') and st.session_state.optimal_strategy.get('use_rsi', True):
+                # Use optimal parameters from regime detection
+                optimal_strategy = st.session_state.optimal_strategy
+                st.info("Using regime-optimized parameters")
+                
+                rsi_period = st.slider("RSI Period", 7, 30, 
+                                      optimal_strategy.get('rsi_period', st.session_state.rsi_period), 
+                                      key="bt_rsi_period")
+                rsi_overbought = st.slider("Overbought Level", 60, 90, 
+                                          optimal_strategy.get('rsi_overbought', st.session_state.rsi_overbought), 
+                                          key="bt_rsi_overbought")
+                rsi_oversold = st.slider("Oversold Level", 10, 40, 
+                                        optimal_strategy.get('rsi_oversold', st.session_state.rsi_oversold), 
+                                        key="bt_rsi_oversold")
+                position_size = st.slider("Position Size (%)", 1, 100, 
+                                         int(optimal_strategy.get('position_size', 0.1) * 100), 
+                                         key="bt_rsi_position_size")
+                stop_loss = st.slider("Stop Loss (%)", 1, 20, 
+                                     int(optimal_strategy.get('stop_loss', 0.05) * 100), 
+                                     key="bt_rsi_stop_loss")
+                take_profit = st.slider("Take Profit (%)", 1, 30, 
+                                       int(optimal_strategy.get('take_profit', 0.1) * 100), 
+                                       key="bt_rsi_take_profit")
+            else:
+                # Use default parameters
+                rsi_period = st.slider("RSI Period", 7, 30, st.session_state.rsi_period, key="bt_rsi_period")
+                rsi_overbought = st.slider("Overbought Level", 60, 90, st.session_state.rsi_overbought, key="bt_rsi_overbought")
+                rsi_oversold = st.slider("Oversold Level", 10, 40, st.session_state.rsi_oversold, key="bt_rsi_oversold")
+                position_size = st.slider("Position Size (%)", 1, 100, 10, key="bt_rsi_position_size")
+                stop_loss = st.slider("Stop Loss (%)", 1, 20, 5, key="bt_rsi_stop_loss")
+                take_profit = st.slider("Take Profit (%)", 1, 30, 10, key="bt_rsi_take_profit")
+            
             params["rsi_period"] = rsi_period
             params["rsi_overbought"] = rsi_overbought
             params["rsi_oversold"] = rsi_oversold
+            params["position_size"] = position_size / 100.0
+            params["stop_loss"] = stop_loss / 100.0
+            params["take_profit"] = take_profit / 100.0
             
         elif strategy_type == "Combined Strategy":
             st.subheader("Combined Strategy Parameters")
