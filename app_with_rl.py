@@ -475,10 +475,13 @@ else:
         with run_col:
             if st.button("Run Backtest"):
                 with st.spinner("Running backtest..."):
+                    # Initialize a control variable
+                    continue_execution = True
+                    
                     # Simple Moving Average Crossover strategy
                     data = st.session_state.market_data.copy()
                     
-                    if strategy_type == "AI Model (RL)" and available_models:
+                    if strategy_type == "AI Model (RL)" and 'available_models' in locals() and available_models:
                         try:
                             # Load the model
                             model_path = os.path.join(simple_rl.MODELS_DIR, selected_model)
@@ -510,11 +513,11 @@ else:
                             
                         except Exception as e:
                             st.error(f"Error evaluating AI model: {str(e)}")
-                            # Skip to the next section
                             continue_execution = False
                     
                     # If there was an error, skip to displaying results
                     if not continue_execution:
+                        st.warning("Couldn't complete the backtest due to errors")
                         st.stop()
                     else:
                         # Create signals
