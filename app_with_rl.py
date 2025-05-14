@@ -913,11 +913,51 @@ else:
         strategy_name = st.text_input("Strategy Name", f"{strategy_type} Strategy")
         strategy_description = st.text_area("Strategy Description", "")
         
+        # Option to use market regime optimized parameters
+        use_regime_optimized = st.checkbox("Use Market Regime Optimized Parameters", False, 
+                                         help="Automatically select strategy parameters based on the current market regime")
+        
         # Run backtest button
         run_col, save_col = st.columns(2)
         with run_col:
             if st.button("Run Backtest"):
                 with st.spinner("Running backtest..."):
+                    # Check if we should use regime-optimized parameters
+                    if use_regime_optimized:
+                        try:
+                            # Detect current market regime
+                            detector = market_regime.MarketRegimeDetector()
+                            selected_data = st.session_state.market_data.copy()
+                            lookback = min(30, len(selected_data))
+                            regime = detector.detect_regime(selected_data.iloc[-lookback:], lookback_period=lookback)
+                            
+                            st.info(f"Detected market regime: **{regime['regime']}** (Confidence: {regime['confidence']:.2f})")
+                            
+                            # Get optimal strategy parameters for this regime
+                            optimal_params = detector.get_best_strategy(regime['regime'])
+                            
+                            if optimal_params and isinstance(optimal_params, dict):
+                                # Extract parameters differently depending on the dict structure
+                                if "parameters" in optimal_params:
+                                    st.success(f"Using regime-optimized parameters for {regime['regime']}")
+                                    # Update the parameters while preserving position sizing and risk mgmt settings
+                                    strategy_params = optimal_params["parameters"]
+                                    # Maintain risk settings from user input
+                                    for key, value in strategy_params.items():
+                                        if key not in ["position_size", "stop_loss", "take_profit", "max_drawdown"]:
+                                            params[key] = value
+                                else:
+                                    st.success(f"Using regime-optimized parameters for {regime['regime']}")
+                                    # Update the parameters while preserving position sizing and risk mgmt settings
+                                    for key, value in optimal_params.items():
+                                        if key not in ["position_size", "stop_loss", "take_profit", "max_drawdown"]:
+                                            params[key] = value
+                            else:
+                                st.warning("No optimized parameters found for this regime. Using default parameters.")
+                        except Exception as e:
+                            st.error(f"Error determining optimal parameters: {str(e)}")
+                            st.warning("Using default parameters instead.")
+                    
                     # Initialize a control variable
                     continue_execution = True
                     
