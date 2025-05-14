@@ -4,8 +4,11 @@ address = "0.0.0.0"
 port = 5000
 
 [theme]
-base = "dark"
-primaryColor = "#FF4B4B"
-backgroundColor = "#0E1117"
-secondaryBackgroundColor = "#262730"
-textColor = "#FAFAFA"
+primaryColor = "#0047AB"  # Cobalt blue for interactive elements
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F8FF"  # Very light blue background
+textColor = "#262730"
+font = "sans serif"
+
+[deprecation]
+showPyplotGlobalUse = false

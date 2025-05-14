@@ -14,8 +14,8 @@ import market_regime
 
 # Set page configuration
 st.set_page_config(
-    page_title="Futures Trading Bot",
-    page_icon="📈",
+    page_title="Apex Trader",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -205,13 +205,68 @@ with st.sidebar:
         st.session_state.take_profit = st.slider("Take Profit (%)", 1, 50, 15) / 100
         st.session_state.max_drawdown = st.slider("Max Drawdown (%)", 5, 50, 25) / 100
 
+# Add custom CSS styling
+st.markdown("""
+<style>
+.main-header {
+    color: #1A365D;
+    font-weight: 600;
+    margin-bottom: 0;
+}
+.tagline {
+    color: #0047AB;
+    font-style: italic;
+    margin-top: 0;
+    font-size: 1.2rem;
+}
+.profit-metric {
+    color: #71EEB8;
+}
+.loss-metric {
+    color: #FF6B6B;
+}
+.highlight-box {
+    background-color: #F0F8FF;
+    border-left: 5px solid #0047AB;
+    padding: 10px;
+    border-radius: 3px;
+    margin-bottom: 20px;
+}
+.regime-trending-up {
+    color: white;
+    background-color: #71EEB8;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+.regime-trending-down {
+    color: white;
+    background-color: #FF6B6B;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+.regime-ranging {
+    color: white;
+    background-color: #0047AB;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+.regime-volatile {
+    color: white;
+    background-color: #FFA500;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Main content area based on selected tab
 if not st.session_state.data_loaded:
     # Show sample dashboard with placeholders
-    st.header("Welcome to the Futures Trading Bot")
+    st.markdown("<h1 class='main-header'>APEX TRADER</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='tagline'>Apex fears no loss</p>", unsafe_allow_html=True)
     
     st.image("https://pixabay.com/get/gc73bb9e10face2db12906e9d4a3d077611cf0f39fe97ae7f212a436d875bd97d7790de2b7e0bfd6785e574afa98cae7978112475e6185e817d4d29b3c4f23689_1280.jpg", 
-             caption="Financial Trading Dashboard")
+             caption="Advanced Trading Intelligence")
     
     st.subheader("Getting Started")
     st.write("""
@@ -244,7 +299,8 @@ if not st.session_state.data_loaded:
 else:
     # Dashboard with data
     if st.session_state.current_tab == 'Dashboard':
-        st.header("Trading Dashboard")
+        st.markdown("<h1 class='main-header'>APEX TRADER DASHBOARD</h1>", unsafe_allow_html=True)
+        st.markdown("<p class='tagline'>Apex fears no loss</p>", unsafe_allow_html=True)
         
         # Overview metrics
         metric1, metric2, metric3, metric4 = st.columns(4)
@@ -1096,6 +1152,138 @@ else:
                     # Show equity curve
                     st.subheader("Equity Curve")
                     st.line_chart(data['Cumulative_Return'])
+                    
+                    # Add regime integration
+                    with st.expander("Market Regime Integration"):
+                        st.subheader("Strategy Performance by Market Regime")
+                        
+                        # Detect market regimes for the backtest period
+                        try:
+                            detector = market_regime.MarketRegimeDetector()
+                            
+                            # Run regime detection on backtest data
+                            regimes = []
+                            lookback = 20  # Lookback window for regime detection
+                            
+                            # Use a sliding window approach to detect regimes throughout the backtest period
+                            for i in range(lookback, len(data), lookback // 2):  # Overlap windows by half
+                                window_data = data.iloc[i-lookback:i].copy()
+                                if len(window_data) >= lookback // 2:  # Ensure sufficient data
+                                    regime = detector.detect_regime(window_data, lookback_period=len(window_data))
+                                    regimes.append({
+                                        'date': data.index[i-1],
+                                        'regime': regime['regime'],
+                                        'confidence': regime['confidence']
+                                    })
+                            
+                            if regimes:
+                                # Create a DataFrame of detected regimes
+                                regime_df = pd.DataFrame(regimes)
+                                
+                                st.write("Detected Market Regimes During Backtest:")
+                                st.dataframe(regime_df)
+                                
+                                # Option to update strategy performance for detected regimes
+                                if st.checkbox("Update Strategy Performance for Detected Regimes", False):
+                                    st.write("This will save the strategy's performance metrics for each detected market regime")
+                                    
+                                    if st.button("Save Performance Data by Regime"):
+                                        # Group the backtest data by regime and calculate performance for each
+                                        regime_performances = {}
+                                        
+                                        for reg in regimes:
+                                            regime_type = reg['regime']
+                                            date = reg['date']
+                                            
+                                            # Find data for this regime period (between this regime point and the next)
+                                            next_idx = regimes.index(reg) + 1
+                                            end_date = regimes[next_idx]['date'] if next_idx < len(regimes) else data.index[-1]
+                                            
+                                            try:
+                                                # Get data for this regime period
+                                                period_data = data.loc[date:end_date].copy()
+                                                
+                                                if len(period_data) > 5:  # Ensure sufficient data
+                                                    # Calculate performance for this period
+                                                    period_return = period_data['Cumulative_Return'].iloc[-1] / period_data['Cumulative_Return'].iloc[0] - 1
+                                                    
+                                                    # Calculate other metrics
+                                                    period_returns = period_data['Strategy_Return'].dropna()
+                                                    period_sharpe = period_returns.mean() / period_returns.std() * np.sqrt(252) if period_returns.std() > 0 else 0
+                                                    
+                                                    # Store metrics
+                                                    if regime_type not in regime_performances:
+                                                        regime_performances[regime_type] = {
+                                                            'returns': [],
+                                                            'sharpe_ratios': [],
+                                                            'periods': 0
+                                                        }
+                                                    
+                                                    regime_performances[regime_type]['returns'].append(period_return)
+                                                    regime_performances[regime_type]['sharpe_ratios'].append(period_sharpe)
+                                                    regime_performances[regime_type]['periods'] += 1
+                                            except Exception as e:
+                                                st.warning(f"Could not calculate performance for period {date} to {end_date}: {str(e)}")
+                                        
+                                        # Calculate average performance by regime
+                                        for regime_type, perf in regime_performances.items():
+                                            if perf['periods'] > 0:
+                                                avg_return = np.mean(perf['returns'])
+                                                avg_sharpe = np.mean(perf['sharpe_ratios'])
+                                                
+                                                # Create performance metrics
+                                                metrics = {
+                                                    'total_return': avg_return * 100,
+                                                    'sharpe_ratio': avg_sharpe,
+                                                    'sample_size': perf['periods']
+                                                }
+                                                
+                                                # Update strategy performance in detector
+                                                detector.update_strategy_performance(
+                                                    regime_type, 
+                                                    {
+                                                        'strategy_type': strategy_type,
+                                                        'parameters': params
+                                                    }, 
+                                                    metrics
+                                                )
+                                        
+                                        st.success("Strategy performance saved for each detected regime!")
+                                        
+                                # Option to get optimal strategy for a specific regime
+                                st.subheader("Optimal Strategy by Regime")
+                                regime_options = list(set([r['regime'] for r in regimes]))
+                                if regime_options:
+                                    selected_regime = st.selectbox("Select a market regime:", regime_options)
+                                    
+                                    if st.button(f"Get Optimal Strategy for {selected_regime}"):
+                                        try:
+                                            optimal_params = detector.get_best_strategy(selected_regime)
+                                            
+                                            if optimal_params:
+                                                st.success(f"Found optimized strategy for {selected_regime} regime!")
+                                                
+                                                # Display strategy parameters
+                                                st.write("**Optimal Strategy Parameters:**")
+                                                
+                                                if "strategy_type" in optimal_params:
+                                                    st.write(f"Strategy Type: {optimal_params['strategy_type']}")
+                                                    
+                                                    if "parameters" in optimal_params:
+                                                        for param, value in optimal_params["parameters"].items():
+                                                            st.write(f"- {param}: {value}")
+                                                else:
+                                                    # If it's just parameters without type
+                                                    for param, value in optimal_params.items():
+                                                        st.write(f"- {param}: {value}")
+                                            else:
+                                                st.info(f"No optimized strategy available for {selected_regime} regime yet.")
+                                        except Exception as e:
+                                            st.error(f"Error retrieving optimal strategy: {str(e)}")
+                            else:
+                                st.info("No regimes detected during the backtest period.")
+                        except Exception as e:
+                            st.error(f"Error in regime detection: {str(e)}")
         
         with save_col:
             # Only enable save button if backtest has been run
